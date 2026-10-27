@@ -1,0 +1,62 @@
+{
+  "name": "Career Intelligence - Error Handler",
+  "nodes": [
+    {
+      "id": "c7781523-4c69-4819-ba78-6530c5b41f38",
+      "name": "On Workflow Error",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "b5d7834f-942c-4b7d-bea2-5974ffe1b1fb",
+      "name": "Send Error Alert",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        224,
+        0
+      ],
+      "parameters": {
+        "sendTo": "your-alerts-email@example.com",
+        "subject": "=⚠️ Workflow error: {{ $json.workflow.name }}",
+        "emailType": "html",
+        "message": "=<p>A workflow execution failed.</p><ul><li><b>Workflow:</b> {{ $json.workflow.name }} ({{ $json.workflow.id }})</li><li><b>Failed node:</b> {{ $json.execution.lastNodeExecuted }}</li><li><b>Error:</b> {{ $json.execution.error.message }}</li><li><b>Time:</b> {{ $json.execution.startedAt }}</li></ul><p><a href=\"{{ $json.execution.url }}\">Open the failed execution</a></p>",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "YOUR_GMAIL_CREDENTIAL"
+        }
+      },
+      "webhookId": "REGENERATED_BY_N8N_ON_IMPORT"
+    }
+  ],
+  "connections": {
+    "On Workflow Error": {
+      "main": [
+        [
+          {
+            "node": "Send Error Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "pinData": {},
+  "triggerCount": 0,
+  "meta": null
+}

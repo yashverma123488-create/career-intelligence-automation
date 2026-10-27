@@ -1,0 +1,1873 @@
+{
+  "name": "Career Intelligence Automation V1",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "documentId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "YOUR_FORM_RESPONSES_SHEET_ID",
+          "cachedResultName": "Your Google Sheet",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/PLACEHOLDER/edit"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "list",
+          "value": "YOUR_FORM_RESPONSES_TAB_GID",
+          "cachedResultName": "Form responses 1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/PLACEHOLDER/edit"
+        },
+        "event": "rowAdded",
+        "options": {}
+      },
+      "id": "70b8b53b-f750-4dd5-abb3-fc776c394fe1",
+      "name": "Form Response Trigger",
+      "type": "n8n-nodes-base.googleSheetsTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -256
+      ],
+      "credentials": {
+        "googleSheetsTriggerOAuth2Api": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "YOUR_GOOGLE_SHEETS_TRIGGER_CREDENTIAL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "logo",
+              "name": "logo_url",
+              "type": "string",
+              "value": "https://example.com/your-logo.png"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "345056e6-064d-476f-ab0d-9d1d7b50e7aa",
+      "name": "Workflow Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        448,
+        -16
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const row = $json || {};\nconst entries = Object.entries(row).filter(([k]) => k !== \"logo_url\");\nconst emailRe = /[a-z0-9._%+-]+@[a-z0-9.-]+\\.[a-z]{2,}/i;\nlet email = \"\";\nfor (const [k, v] of entries) {\n  if (/e-?mail/i.test(k) && v && emailRe.test(String(v))) { email = String(v); break; }\n}\nif (!email) { for (const [, v] of entries) { const m = String(v || \"\").match(emailRe); if (m) { email = m[0]; break; } } }\nemail = email.toLowerCase().trim();\nlet name = \"\";\nfor (const [k, v] of entries) { if (/full\\s*name|your name|name/i.test(k) && v) { name = String(v).trim(); break; } }\nif (!name && email) name = email.split(\"@\")[0];\nconst submission = {};\nfor (const [k, v] of entries) { submission[String(k).trim()] = (v === null || v === undefined) ? \"\" : String(v).trim(); }\nreturn [{ json: { student_name: name, student_email: email, logo_url: row.logo_url || \"\", submitted_at: new Date().toISOString(), submission } }];"
+      },
+      "id": "86c55bc0-7b64-479b-b790-7f8d933d048e",
+      "name": "Normalize Submission",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        -16
+      ]
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_EXISTING_STUDENTS_SHEET_ID",
+          "mode": "list",
+          "cachedResultName": "Your Google Sheet",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/PLACEHOLDER/edit"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "EXISTING STUDENTS"
+        },
+        "options": {}
+      },
+      "id": "28138553-ac69-423a-8bd4-893a09a5fca0",
+      "name": "Read Existing Students",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        896,
+        -16
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "YOUR_GOOGLE_SHEETS_CREDENTIAL"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $(\"Normalize Submission\").first().json;\nconst email = (ctx.student_email || \"\").toLowerCase().trim();\nconst rows = $input.all().map(i => i.json).filter(r => r && Object.keys(r).length);\nconst existing = rows.map(r => String(r.Email || r.email || r[\"Email Address\"] || \"\").toLowerCase().trim()).filter(Boolean);\nlet isNew = \"yes\";\nif (!email) isNew = \"no\";\nelse if (existing.includes(email)) isNew = \"no\";\nconst reason = !email ? \"missing_email\" : (existing.includes(email) ? \"duplicate\" : \"new\");\nreturn [{ json: { ...ctx, is_new: isNew, dedupe_reason: reason, existing_count: existing.length } }];"
+      },
+      "id": "a5d7fafd-ac7a-43dd-9e4f-22120a8a47f6",
+      "name": "Duplicate Check",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        -16
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.is_new }}",
+              "rightValue": "yes",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "f8b33480-7e60-4645-aecb-39c312935b18",
+      "name": "Is New Student",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1344,
+        -16
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "f13126f6-277d-46cf-b1a7-565980bfe482",
+      "name": "Proceed - New Student",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1568,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $json;\nconst sub = ctx.submission || {};\nconst blob = (ctx.student_name + \" \" + Object.values(sub).join(\" \")).toLowerCase();\nlet type = \"90-day\"; let days = 90; let label = \"90 Days\";\nconst isPro = (/(experienced|working professional|full[- ]?time employ|years of experience|currently employed)/.test(blob) && !/fresher|student/.test(blob)) || /experienced professional/.test(blob);\nif (isPro) { type = \"90-day\"; days = 90; label = \"90 Days\"; }\nelse if (/bba/.test(blob)) {\n  if (/(3rd|third|final)\\s*year/.test(blob)) { type = \"1-year\"; days = 365; label = \"1 Year\"; }\n  else if (/(1st|first|2nd|second)\\s*year/.test(blob)) { type = \"2-year\"; days = 730; label = \"2 Years\"; }\n  else { type = \"1-year\"; days = 365; label = \"1 Year\"; }\n}\nelse if (/mba/.test(blob)) {\n  if (/(2nd|second|final)\\s*year/.test(blob)) { type = \"90-day\"; days = 90; label = \"90 Days\"; }\n  else if (/(1st|first)\\s*year/.test(blob)) { type = \"2-year\"; days = 730; label = \"2 Years\"; }\n  else { type = \"90-day\"; days = 90; label = \"90 Days\"; }\n}\nreturn [{ json: { ...ctx, roadmap_type: type, roadmap_days: days, roadmap_label: label } }];"
+      },
+      "id": "bfb1983e-d993-4bb3-a7ae-a9290547350d",
+      "name": "Roadmap Duration",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        32
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are a senior career-intelligence analyst. Analyze ONE student and return ONE structured JSON intelligence package. Output ONLY valid minified JSON, no markdown, no code fences, no commentary.\n\nSTUDENT NAME: {{ $json.student_name }}\nSTUDENT EMAIL: {{ $json.student_email }}\nREQUIRED ROADMAP DURATION (fixed by system, DO NOT change): {{ $json.roadmap_label }} (type {{ $json.roadmap_type }}, {{ $json.roadmap_days }} days)\nRAW FORM SUBMISSION (JSON): {{ JSON.stringify($json.submission) }}\n\nRULES:\n- Classify facts internally as VERIFIED_FACT / INFERENCE / ANALYTICAL_ASSESSMENT / ESTIMATE / UNKNOWN but NEVER expose these labels in any output text.\n- Never invent institutions, marks, CGPA, dates, employers, job titles, salaries, projects, certifications, tools, or experience. Resume factual claims may ONLY use verified student facts.\n- The stated career goal is an INPUT, not a conclusion. Assess true alignment; do not assign a high fit just because the student chose the role.\n- Career Readiness dimensions MUST be specific to the target career (not a universal scorecard). Readiness categories: 90-100 Exceptional, 80-89 Strong, 70-79 Good, 60-69 Developing, 0-59 Needs Development.\n- Alignment must differ from readiness (alignment = profile-vs-career match; readiness = current preparedness).\n- Every gap must include an action. Status is MET, PARTIALLY MET or GAP. Salary future numbers are ranges labelled INDICATIVE ESTIMATE — NOT GUARANTEED. If current salary not provided, use \"Not provided\".\n- Market data: prefer reliable current knowledge; if not live-verified set market_scenario.data_status to \"CURRENT MARKET DATA NOT LIVE-VERIFIED\". Never invent job counts or market statistics.\n- The ninety_day_plan MUST link tasks to identified gaps and is the SAME plan used by the tracker and report.\n- Experience classification: internships or academic projects alone do NOT make a student EXPERIENCED.\n- Resume must be ATS-grade, target-role aligned, and contain NO placeholder or filler text ANYWHERE inside the resume object. The following (and any casing/variant) are BANNED inside resume: \"Not Provided\", \"Not Applicable\", \"N/A\", \"Unknown\", \"Unavailable\", \"To Be Added\", \"No Information\", \"Current Institution\", \"Startup\" (as a placeholder company), \"example.com\", and any invented stand-in for a missing fact. If a fact (phone, LinkedIn, employer, institute, dates) is not present in the verified student data, OMIT that field or entire section entirely rather than writing a placeholder or guessing. resume.contact must include ONLY the channels actually provided by the student; drop any contact field with no real value, and never write an empty-string value inside resume — omit the key instead.\n- Resume experience entries MUST use EXACTLY these keys and no others: {\"title\": job title, \"org\": employer name, \"period\": dates, \"bullets\": [achievement strings]}. Include an experience entry ONLY when the student actually reported real paid/internship work with a real employer and title; otherwise return \"experience\":[] (empty array). Never invent an employer, title, or dates to fill this section.\n\nANALYTICAL FRAMEWORKS (apply these lenses when producing the analysis; do NOT expose framework names or add new JSON keys — express the thinking inside the existing fields):\n- Three-Basket Student Categorization (foundational triage): internally categorize the student by academic performance, communication proficiency, and technical/domain competency to calibrate readiness dimensions, primary_career.fit and the intensity of interventions. Higher-basket profiles get stretch targets; lower-basket profiles get foundational, sequenced actions.\n- GROW Coaching Model (Goal, Reality, Options, Will): frame the guidance as a developmental dialogue. Treat the stated career goal as the Goal, use readiness/gap_analysis as the Reality baseline, use alternative_careers as viable Options, and make top_priority_actions + final_direction the committed near-term Will/Way-Forward with concrete, time-bound commitments.\n- 70-20-10 Developmental Learning: structure roadmap.phases and ninety_day_plan so development is balanced ~70% experiential (live projects, internships, simulations, portfolio builds), ~20% social (mentorship, peer/alumni networking, informational interviews), ~10% formal (certifications, courses, workshops). Ensure each roadmap phase and the 90-day plan collectively reflect all three modes rather than only coursework.\n- Skill-Gap & Competency Mapping Matrix: in gap_analysis and readiness.dimensions, separate core technical/domain competencies from behavioral/soft traits, map current vs. target state, and give each a quantitative gap that dictates precise upskilling BEFORE placement interviews.\n- Design Thinking for Career Planning (Prototype-Test-Iterate): treat career choices as prototypes. Reflect this in career_pathway and alternative_careers by recommending micro-internships, informational interviews, and iterative feedback loops so the student can validate and refine the trajectory rather than lock in prematurely.\n\nReturn JSON with EXACTLY these top-level keys: student_snapshot, readiness, primary_career, alternative_careers, alignment, target_industry, market_scenario, employability, target_companies, gap_analysis, career_pathway, roadmap, ninety_day_plan, skill_plan, milestones, compensation, must_haves, top_priority_actions, final_direction, disclaimer, resume.\nMatch this exact shape (replace with real analysis for THIS student):\n{\"student_snapshot\":{\"name\":\"Aarav Sharma\",\"headline\":\"Final-year BBA student targeting Business Analyst roles\",\"location\":\"Pune, India\",\"current_status\":\"Student\",\"experience_level\":\"FRESHER\"},\"readiness\":{\"score\":68,\"category\":\"Developing\",\"dimensions\":[{\"dimension\":\"Analytical Capability\",\"weight\":20,\"score\":70,\"evidence\":\"Course projects in data interpretation\",\"missing\":\"Formal case-study practice\",\"improve\":\"Complete 5 structured BA case studies\"},{\"dimension\":\"Business & Domain Knowledge\",\"weight\":20,\"score\":72,\"evidence\":\"BBA core coursework\",\"missing\":\"Industry-specific depth\",\"improve\":\"Study one target industry in depth\"},{\"dimension\":\"Technical / Data Skills\",\"weight\":20,\"score\":55,\"evidence\":\"Basic Excel\",\"missing\":\"SQL and BI tools\",\"improve\":\"Learn SQL + Power BI\"},{\"dimension\":\"Communication & Stakeholder Readiness\",\"weight\":20,\"score\":74,\"evidence\":\"Club leadership\",\"missing\":\"Requirement documentation\",\"improve\":\"Practice BRD/user-story writing\"},{\"dimension\":\"Career Alignment\",\"weight\":20,\"score\":66,\"evidence\":\"Clear stated goal\",\"missing\":\"Portfolio evidence\",\"improve\":\"Build 2 analysis portfolio pieces\"}]},\"primary_career\":{\"role\":\"Business Analyst\",\"fit_score\":66,\"fit_category\":\"Moderate Fit\",\"reason\":\"Strong business foundation and communication, but limited technical/data tooling and no professional experience yet.\",\"supporting_evidence\":[\"BBA coursework in business analysis\",\"Leadership in college clubs\"],\"strengths\":[\"Business fundamentals\",\"Communication\",\"Stakeholder orientation\"],\"major_gaps\":[\"SQL / data querying\",\"BI tooling\",\"Documented analysis portfolio\"],\"immediate_actions\":[\"Start an SQL course\",\"Build a requirements document sample\",\"Complete a dashboarding project\"]},\"alternative_careers\":[{\"role\":\"Product Analyst\",\"fit_score\":62,\"reason\":\"Overlaps with analytical + business skills\",\"key_gaps\":[\"Product metrics\",\"SQL\"]},{\"role\":\"Operations Analyst\",\"fit_score\":60,\"reason\":\"Process orientation fits current profile\",\"key_gaps\":[\"Process mapping tools\",\"Data analysis\"]}],\"alignment\":{\"score\":61,\"category\":\"Partially Aligned\",\"reasoning\":\"Goal is realistic but current evidence toward the role is limited.\",\"strengths\":[\"Clear direction\",\"Relevant degree\"],\"misalignment\":\"Lacks technical data skills the role expects\",\"recommended_direction\":\"Close data-skill gaps then target junior BA roles\"},\"target_industry\":{\"name\":\"IT Services & Consulting\",\"summary\":\"High demand for entry BA talent with data literacy.\",\"tags\":[\"Consulting\",\"SaaS\",\"BFSI\",\"Analytics\"]},\"market_scenario\":{\"data_status\":\"CURRENT MARKET DATA NOT LIVE-VERIFIED\",\"current_roles\":[\"Business Analyst\",\"Junior BA\"],\"evolving_roles\":[\"Analytics-focused BA\",\"Product-adjacent BA\"],\"emerging_roles\":[\"AI-enabled BA\"],\"entry_roles\":[\"BA Trainee\",\"Analyst Intern\"],\"long_term_roles\":[\"Senior BA\",\"Product Manager\"],\"key_skills\":[\"SQL\",\"Requirements analysis\",\"Power BI/Tableau\",\"Stakeholder management\"],\"hiring_considerations\":[\"Portfolio and case ability often matter more than degree for entry roles\"]},\"employability\":{\"score\":64,\"market_readiness\":\"Developing\",\"interview_readiness\":\"Needs practice\",\"time_to_employable\":\"4-6 months with focused effort\",\"target_employer_profile\":\"IT services & mid-size product firms hiring BA trainees\",\"key_gaps\":[\"Data tooling\",\"Interview practice\"],\"quick_wins\":[\"Add an SQL certificate\",\"Publish one analysis case\"]},\"target_companies\":[{\"company\":\"Mid-size IT services firm\",\"role_family\":\"Business Analyst Trainee\",\"match_category\":\"READY AFTER DEVELOPMENT\",\"why\":\"Regular entry BA hiring\",\"major_requirement\":\"Basic SQL + communication\",\"application_readiness\":\"After SQL skill built\"},{\"company\":\"Analytics consulting firm\",\"role_family\":\"Junior Analyst\",\"match_category\":\"STRETCH TARGET\",\"why\":\"Strong communication fit\",\"major_requirement\":\"Case + data skills\",\"application_readiness\":\"Needs portfolio\"}],\"gap_analysis\":[{\"requirement\":\"SQL / data querying\",\"current_state\":\"None\",\"target_state\":\"Intermediate\",\"status\":\"GAP\",\"priority\":\"High\",\"action\":\"Complete an SQL course + 20 practice problems\",\"expected_outcome\":\"Can query and analyze datasets\",\"timeframe\":\"30 days\"},{\"requirement\":\"BI dashboarding\",\"current_state\":\"Basic Excel\",\"target_state\":\"Power BI project\",\"status\":\"PARTIALLY MET\",\"priority\":\"High\",\"action\":\"Build one end-to-end dashboard\",\"expected_outcome\":\"Portfolio dashboard\",\"timeframe\":\"45 days\"},{\"requirement\":\"Requirements documentation\",\"current_state\":\"Academic only\",\"target_state\":\"Sample BRD/user stories\",\"status\":\"PARTIALLY MET\",\"priority\":\"Medium\",\"action\":\"Write a BRD for a sample product\",\"expected_outcome\":\"Demonstrable BA artifact\",\"timeframe\":\"20 days\"}],\"career_pathway\":[{\"stage\":\"Current Profile\",\"detail\":\"Final-year BBA, strong business + communication base\"},{\"stage\":\"Capability Development\",\"detail\":\"SQL, BI tools, requirements writing\"},{\"stage\":\"Projects\",\"detail\":\"Dashboard + BRD portfolio pieces\"},{\"stage\":\"Internship / Experience\",\"detail\":\"BA/Analyst internship\"},{\"stage\":\"Entry Role\",\"detail\":\"Business Analyst Trainee\"},{\"stage\":\"Target Role\",\"detail\":\"Business Analyst\"},{\"stage\":\"Long-Term Direction\",\"detail\":\"Senior BA / Product Manager\"}],\"roadmap\":{\"duration_label\":\"1 Year\",\"phases\":[{\"title\":\"Months 1-3\",\"focus\":\"Core data skills + first portfolio piece\",\"items\":[\"SQL course\",\"Excel to Power BI\",\"First dashboard\"]},{\"title\":\"Months 4-6\",\"focus\":\"Requirements & case practice\",\"items\":[\"BRD writing\",\"Case studies\",\"Mock interviews\"]},{\"title\":\"Months 7-9\",\"focus\":\"Internship / applied experience\",\"items\":[\"Apply to internships\",\"Live project\"]},{\"title\":\"Months 10-12\",\"focus\":\"Job search & interviews\",\"items\":[\"Targeted applications\",\"Interview cycles\"]}]},\"ninety_day_plan\":[{\"task\":\"Complete SQL fundamentals course\",\"category\":\"Technical\",\"priority\":\"High\",\"target_day\":20,\"linked_gap\":\"SQL / data querying\"},{\"task\":\"Solve 20 SQL practice problems\",\"category\":\"Technical\",\"priority\":\"High\",\"target_day\":30,\"linked_gap\":\"SQL / data querying\"},{\"task\":\"Build a Power BI sales dashboard\",\"category\":\"Project\",\"priority\":\"High\",\"target_day\":55,\"linked_gap\":\"BI dashboarding\"},{\"task\":\"Write a sample BRD with user stories\",\"category\":\"Documentation\",\"priority\":\"Medium\",\"target_day\":45,\"linked_gap\":\"Requirements documentation\"},{\"task\":\"Complete 5 BA case studies\",\"category\":\"Analytical\",\"priority\":\"Medium\",\"target_day\":75,\"linked_gap\":\"Analytical capability\"},{\"task\":\"Do 3 mock BA interviews\",\"category\":\"Interview\",\"priority\":\"Medium\",\"target_day\":90,\"linked_gap\":\"Interview readiness\"}],\"skill_plan\":[{\"skill\":\"SQL\",\"starting_level\":\"Beginner\",\"target_level\":\"Intermediate\"},{\"skill\":\"Power BI\",\"starting_level\":\"None\",\"target_level\":\"Intermediate\"},{\"skill\":\"Requirements Analysis\",\"starting_level\":\"Basic\",\"target_level\":\"Proficient\"}],\"milestones\":[{\"milestone\":\"First dashboard published\",\"period\":\"Month 2\",\"related_gap\":\"BI dashboarding\"},{\"milestone\":\"BA portfolio ready\",\"period\":\"Month 4\",\"related_gap\":\"Documented analysis portfolio\"},{\"milestone\":\"Internship secured\",\"period\":\"Month 8\",\"related_gap\":\"Practical experience\"}],\"compensation\":{\"expected_from_form\":\"INR 5-6 LPA\",\"current_salary\":\"Not provided\",\"indicative_range\":{\"min\":350000,\"max\":600000,\"currency\":\"INR\",\"note\":\"INDICATIVE ESTIMATE — NOT GUARANTEED\"}},\"must_haves\":[\"SQL proficiency\",\"One BI portfolio project\",\"Clear BA communication\"],\"top_priority_actions\":[\"Learn SQL now\",\"Build a dashboard\",\"Practice BA interviews\"],\"final_direction\":\"Close data-skill gaps over the next quarter, build a small portfolio, then target Business Analyst Trainee roles in IT services.\",\"disclaimer\":\"This assessment is directional guidance based on the information provided. It is not a guarantee of employment, eligibility, or compensation.\",\"resume\":{\"name\":\"Aarav Sharma\",\"title\":\"Business Analyst\",\"contact\":{\"email\":\"aarav@example.com\",\"phone\":\"+91 90000 00000\",\"linkedin\":\"linkedin.com/in/aarav\",\"location\":\"Pune, India\"},\"summary\":\"Business graduate with strong analytical and communication skills, building data and requirements capabilities toward a Business Analyst career.\",\"skills\":[\"Business analysis\",\"Requirements gathering\",\"Excel\",\"SQL (learning)\",\"Stakeholder communication\"],\"experience\":[],\"projects\":[{\"name\":\"College Market Study\",\"detail\":\"Analyzed campus retail demand\",\"bullets\":[\"Surveyed 200 students\",\"Presented recommendations to faculty\"]}],\"education\":[{\"degree\":\"BBA\",\"institute\":\"Pune University\",\"period\":\"2022-2025\",\"detail\":\"Core: Business Analysis, Statistics\"}],\"certifications\":[],\"achievements\":[\"Led college business club (2024)\"],\"leadership\":[\"Business Club Coordinator\"]}}\n\nroadmap.duration_label MUST equal the fixed roadmap duration above. Return ONLY the JSON object.",
+        "batching": {}
+      },
+      "id": "7a921ef7-020e-4239-9048-7e06bc7e909b",
+      "name": "Career Intelligence Engine",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        1424,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "options": {
+          "maxOutputTokens": 65000,
+          "temperature": 0.15
+        }
+      },
+      "id": "25d081bc-5b11-4776-b6b2-e39f97fb7455",
+      "name": "Gemini 3 Flash Preview",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        1504,
+        144
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "YOUR_GEMINI_CREDENTIAL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $(\"Roadmap Duration\").first().json;\nlet raw = String(($json.text) || ($json.response) || \"\").trim();\nraw = raw.replace(/^```(json)?/i, \"\").replace(/```$/i, \"\").trim();\nconst s = raw.indexOf(\"{\"); const e = raw.lastIndexOf(\"}\");\nlet ai = null; let valid = \"no\";\ntry { if (s !== -1 && e !== -1) { ai = JSON.parse(raw.slice(s, e + 1)); } } catch (err) { ai = null; }\nconst required = [\"student_snapshot\",\"readiness\",\"primary_career\",\"alignment\",\"gap_analysis\",\"ninety_day_plan\",\"resume\",\"compensation\"];\nif (ai && required.every(k => ai[k])) valid = \"yes\";\nif (valid === \"yes\" && ai.roadmap) ai.roadmap.duration_label = ctx.roadmap_label;\nreturn [{ json: { valid, ai, student_name: ctx.student_name, student_email: ctx.student_email, roadmap_type: ctx.roadmap_type, roadmap_days: ctx.roadmap_days, roadmap_label: ctx.roadmap_label, logo_url: ctx.logo_url, submission: ctx.submission } }];"
+      },
+      "id": "37c68911-e623-4e6f-b5b6-621bb174ab41",
+      "name": "Validate Intelligence",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1776,
+        32
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "v1",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": "yes",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "c5c6aec3-d1ed-4dee-b221-e492560ec617",
+      "name": "Is Valid Intelligence",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2000,
+        32
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "a6ddbe47-09cb-4f1b-b287-f3dd697adedd",
+      "name": "Intelligence Ready",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        2224,
+        128
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const v = $(\"Validate Intelligence\").first().json; const ai = v.ai || {}; const s = ai.student_snapshot || {};\nreturn [{ json: {\n  Timestamp: new Date().toISOString(),\n  Name: v.student_name || \"\", Email: v.student_email || \"\",\n  Location: s.location || \"\", \"Current Status\": s.current_status || \"\", \"Experience Level\": s.experience_level || \"\",\n  \"Target Role\": (ai.primary_career||{}).role || \"\", \"Target Industry\": (ai.target_industry||{}).name || \"\"\n} }];"
+      },
+      "id": "b1a10001-0000-4000-8000-000000000001",
+      "name": "Build Student Row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3680,
+        -688
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_MASTER_STUDENT_DATA_SHEET_ID",
+          "mode": "list",
+          "cachedResultName": "Your Google Sheet",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/PLACEHOLDER/edit"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Sheet1"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {}
+        },
+        "options": {
+          "handlingExtraData": "insertInNewColumn"
+        }
+      },
+      "id": "81e74d57-e00e-43f7-a5c7-0b6bc0cc3300",
+      "name": "Save Student Data",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        3680,
+        -880
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "YOUR_GOOGLE_SHEETS_CREDENTIAL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const v = $(\"Validate Intelligence\").first().json; const ai = v.ai || {}; const rd = ai.readiness||{}; const al = ai.alignment||{}; const pc = ai.primary_career||{};\nreturn [{ json: {\n  Timestamp: new Date().toISOString(), Name: v.student_name || \"\", Email: v.student_email || \"\",\n  \"Readiness Score\": rd.score != null ? String(rd.score) : \"\", \"Readiness Category\": rd.category || \"\",\n  \"Alignment Score\": al.score != null ? String(al.score) : \"\", \"Alignment Category\": al.category || \"\",\n  \"Primary Fit Score\": pc.fit_score != null ? String(pc.fit_score) : \"\", \"Primary Fit Category\": pc.fit_category || \"\"\n} }];"
+      },
+      "id": "b1a10001-0000-4000-8000-000000000002",
+      "name": "Build Assessment Row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4128,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_MASTER_ASSESSMENTS_SHEET_ID",
+          "mode": "list",
+          "cachedResultName": "Your Google Sheet",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/PLACEHOLDER/edit"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Sheet1"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {}
+        },
+        "options": {
+          "handlingExtraData": "insertInNewColumn"
+        }
+      },
+      "id": "9c08f79d-705d-4947-9ec5-50aec0e4cf97",
+      "name": "Save Assessment",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        3904,
+        -880
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "YOUR_GOOGLE_SHEETS_CREDENTIAL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const v = $(\"Validate Intelligence\").first().json; const ai = v.ai || {};\nreturn [{ json: {\n  Timestamp: new Date().toISOString(), Name: v.student_name || \"\", Email: v.student_email || \"\",\n  \"Roadmap Duration\": v.roadmap_label || \"\", \"Primary Career\": (ai.primary_career||{}).role || \"\", \"Final Direction\": ai.final_direction || \"\"\n} }];"
+      },
+      "id": "b1a10001-0000-4000-8000-000000000003",
+      "name": "Build Career Plan Row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4576,
+        -880
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_MASTER_CAREER_PLANS_SHEET_ID",
+          "mode": "list",
+          "cachedResultName": "Your Google Sheet",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/PLACEHOLDER/edit"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Sheet1"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {}
+        },
+        "options": {
+          "handlingExtraData": "insertInNewColumn"
+        }
+      },
+      "id": "a3e388b2-a7f1-4263-b5ef-6e9016d6112e",
+      "name": "Save Career Plan",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        4128,
+        -880
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "YOUR_GOOGLE_SHEETS_CREDENTIAL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const v = $(\"Validate Intelligence\").first().json; const ai = v.ai || {};\nreturn [{ json: {\n  Timestamp: new Date().toISOString(), Name: v.student_name || \"\", Email: v.student_email || \"\",\n  \"Report Status\": \"GENERATED\", \"Readiness Score\": (ai.readiness||{}).score != null ? String((ai.readiness||{}).score) : \"\"\n} }];"
+      },
+      "id": "b1a10001-0000-4000-8000-000000000004",
+      "name": "Build Report Row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5024,
+        -880
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_MASTER_REPORTS_SHEET_ID",
+          "mode": "list",
+          "cachedResultName": "Your Google Sheet",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/PLACEHOLDER/edit"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Sheet1"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {}
+        },
+        "options": {
+          "handlingExtraData": "insertInNewColumn"
+        }
+      },
+      "id": "c2b1cdbe-9a01-4647-8402-4436f711e691",
+      "name": "Save Report Record",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        4352,
+        -880
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "YOUR_GOOGLE_SHEETS_CREDENTIAL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "spreadsheet",
+        "title": "={{ $('Validate Intelligence').item.json.student_name.replace(/[^A-Za-z0-9]+/g,'_') }}_Career_Tracker",
+        "sheetsUi": {
+          "sheetValues": [
+            {
+              "title": "DASHBOARD"
+            },
+            {
+              "title": "90-DAY ACTION PLAN"
+            },
+            {
+              "title": "SKILL TRACKER"
+            },
+            {
+              "title": "MILESTONES"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "46eb7070-e232-49e0-801c-19f5ad664c7e",
+      "name": "Create Tracker",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        3824,
+        1712
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "YOUR_GOOGLE_SHEETS_CREDENTIAL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Create Tracker').item.json.spreadsheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "DASHBOARD"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Student": "={{ $('Validate Intelligence').item.json.student_name }}",
+            "Primary Career": "={{ $('Validate Intelligence').item.json.ai.primary_career.role }}",
+            "Target Industry": "={{ $('Validate Intelligence').item.json.ai.target_industry.name }}",
+            "Readiness": "={{ $('Validate Intelligence').item.json.ai.readiness.score }} ({{ $('Validate Intelligence').item.json.ai.readiness.category }})",
+            "Alignment": "={{ $('Validate Intelligence').item.json.ai.alignment.score }} ({{ $('Validate Intelligence').item.json.ai.alignment.category }})",
+            "Roadmap Duration": "={{ $('Validate Intelligence').item.json.roadmap_label }}",
+            "90-Day Progress": "0%",
+            "Total Tasks": "={{ $('Validate Intelligence').item.json.ai.ninety_day_plan.length }}",
+            "Completed": "0",
+            "In Progress": "0",
+            "Pending": "={{ $('Validate Intelligence').item.json.ai.ninety_day_plan.length }}",
+            "Current Phase": "Days 1-30",
+            "Next Priority": "={{ $('Validate Intelligence').item.json.ai.ninety_day_plan[0].task }}"
+          },
+          "schema": [
+            {
+              "id": "Student",
+              "displayName": "Student",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Primary Career",
+              "displayName": "Primary Career",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Target Industry",
+              "displayName": "Target Industry",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Readiness",
+              "displayName": "Readiness",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Alignment",
+              "displayName": "Alignment",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Roadmap Duration",
+              "displayName": "Roadmap Duration",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "90-Day Progress",
+              "displayName": "90-Day Progress",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Total Tasks",
+              "displayName": "Total Tasks",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Completed",
+              "displayName": "Completed",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "In Progress",
+              "displayName": "In Progress",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Pending",
+              "displayName": "Pending",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Current Phase",
+              "displayName": "Current Phase",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Next Priority",
+              "displayName": "Next Priority",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "25530531-82b6-4b55-9c00-0bfb7dfe6fd5",
+      "name": "Tracker Dashboard",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        4048,
+        1328
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "YOUR_GOOGLE_SHEETS_CREDENTIAL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const ai = $(\"Validate Intelligence\").first().json.ai || {};\nconst plan = ai.ninety_day_plan || [];\nreturn plan.map(t => ({ json: {\n  Task: t.task || \"\", Category: t.category || \"\", Priority: t.priority || \"\",\n  \"Target Day\": t.target_day != null ? String(t.target_day) : \"\",\n  Status: \"NOT STARTED\", \"Progress %\": \"0\", Notes: t.linked_gap ? (\"Linked gap: \" + t.linked_gap) : \"\", \"Evidence/Link\": \"\"\n} }));"
+      },
+      "id": "55fb9cda-db33-4838-b1b6-7171ed267f6f",
+      "name": "Build 90-Day Rows",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4048,
+        1520
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Create Tracker').item.json.spreadsheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "90-DAY ACTION PLAN"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {}
+        },
+        "options": {
+          "handlingExtraData": "insertInNewColumn"
+        }
+      },
+      "id": "524fffdb-b231-4b48-a3d9-55f52ad0ea0b",
+      "name": "Tracker 90-Day Plan",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        4272,
+        1520
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "YOUR_GOOGLE_SHEETS_CREDENTIAL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const ai = $(\"Validate Intelligence\").first().json.ai || {};\nconst skills = ai.skill_plan || [];\nreturn skills.map(s => ({ json: {\n  Skill: s.skill || \"\", \"Starting Level\": s.starting_level || \"\", \"Target Level\": s.target_level || \"\",\n  \"Current Level\": s.starting_level || \"\", \"Evidence/Notes\": \"\"\n} }));"
+      },
+      "id": "c6e0a278-27eb-4ceb-a4b6-81f74ded281b",
+      "name": "Build Skill Rows",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4048,
+        1712
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Create Tracker').item.json.spreadsheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "SKILL TRACKER"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {}
+        },
+        "options": {
+          "handlingExtraData": "insertInNewColumn"
+        }
+      },
+      "id": "1f87e53f-9bf0-4961-b612-67a64d1274a5",
+      "name": "Tracker Skills",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        4272,
+        1712
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "YOUR_GOOGLE_SHEETS_CREDENTIAL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const ai = $(\"Validate Intelligence\").first().json.ai || {};\nconst ms = ai.milestones || [];\nreturn ms.map(m => ({ json: {\n  Milestone: m.milestone || \"\", Period: m.period || \"\", \"Related Gap\": m.related_gap || \"\",\n  Status: \"NOT STARTED\", Progress: \"0%\", Notes: \"\"\n} }));"
+      },
+      "id": "6b3d4fe4-10f2-4607-9ca2-d5d17b5bf729",
+      "name": "Build Milestone Rows",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4048,
+        1904
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Create Tracker').item.json.spreadsheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "MILESTONES"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {}
+        },
+        "options": {
+          "handlingExtraData": "insertInNewColumn"
+        }
+      },
+      "id": "11984cfb-6421-4f28-9940-97c0bf505eb2",
+      "name": "Tracker Milestones",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        4272,
+        1904
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "YOUR_GOOGLE_SHEETS_CREDENTIAL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "share",
+        "fileId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Create Tracker').item.json.spreadsheetId }}"
+        },
+        "permissionsUi": {
+          "permissionsValues": {
+            "role": "writer",
+            "type": "user",
+            "emailAddress": "={{ $('Validate Intelligence').item.json.student_email }}"
+          }
+        },
+        "options": {
+          "sendNotificationEmail": false
+        }
+      },
+      "id": "1a0341a1-2760-4e05-8227-6679d1ae8f92",
+      "name": "Share Tracker",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        4048,
+        2096
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "YOUR_GOOGLE_DRIVE_CREDENTIAL"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "6c8db0e0-93c7-4481-b2bb-6fac202ebdfb",
+      "name": "Prepare Documents",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        5472,
+        1360
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const v = $(\"Validate Intelligence\").first().json;\nconst ai = v.ai || {}; const logo = v.logo_url || \"\";\nconst e = (x) => String(x == null ? \"\" : x).replace(/&/g,\"&amp;\").replace(/</g,\"&lt;\").replace(/>/g,\"&gt;\");\nconst arr = (x) => Array.isArray(x) ? x : [];\nconst snap = ai.student_snapshot||{}; const rd = ai.readiness||{}; const pc = ai.primary_career||{}; const al = ai.alignment||{}; const ti = ai.target_industry||{}; const ms = ai.market_scenario||{}; const emp = ai.employability||{}; const comp = ai.compensation||{}; const ir = comp.indicative_range||{};\nconst badge = (t,c) => \"<span class=\\\"badge \" + c + \"\\\">\" + e(t) + \"</span>\";\nconst cc = (s) => { s=Number(s)||0; return s>=80?\"g\":s>=60?\"b\":s>=40?\"a\":\"r\"; };\nconst prBar = (n) => { const p = Math.max(0, Math.min(100, Number(n)||0)); return \"<span class=\\\"bar\\\"><span class=\\\"fill \" + cc(p) + \"\\\" style=\\\"width:\" + p + \"%\\\"></span></span><span class=\\\"barv\\\">\" + p + \"</span>\"; };\nconst H = [];\nH.push(\"<!DOCTYPE html><html><head><meta charset=\\\"utf-8\\\"><style>\");\nH.push(\"@page{size:A4;margin:0.5in 0.55in;}*{box-sizing:border-box;}\");\nH.push(\"body{font-family:Arial,Helvetica,sans-serif;color:#1f2937;font-size:9pt;line-height:1.45;margin:0;}\");\nH.push(\"h1,h2,h3{margin:0;color:#0f2447;}h2{font-size:12pt;margin:16px 0 8px;padding-bottom:4px;border-bottom:2px solid #0f2447;break-after:avoid;}h3{font-size:10pt;margin:8px 0 4px;color:#1d3a6b;}\");\nH.push(\"p{margin:4px 0;}ul{margin:4px 0 8px 16px;padding:0;}li{margin:2px 0;}\");\nH.push(\".hdr{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #0f2447;padding-bottom:12px;margin-bottom:12px;}\");\nH.push(\".hdr .logo{max-height:56px;max-width:150px;object-fit:contain;}\");\nH.push(\".grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:8px 0;}.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:8px 0;}.grid2{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin:8px 0;}\");\nH.push(\".card{border:1px solid #d7dee8;border-radius:6px;padding:8px 10px;break-inside:avoid;background:#fff;}\");\nH.push(\".metric{background:#f4f7fb;text-align:center;}.metric .n{font-size:16pt;font-weight:bold;color:#0f2447;}.metric .l{font-size:7.5pt;color:#5b6774;text-transform:uppercase;letter-spacing:.4px;}\");\nH.push(\".bar{display:inline-block;width:60%;height:9px;background:#e6ebf2;border-radius:5px;vertical-align:middle;overflow:hidden;}.fill{display:block;height:100%;}.fill.g{background:#1a9d5a;}.fill.b{background:#2563eb;}.fill.a{background:#d97706;}.fill.r{background:#dc2626;}.barv{font-size:8pt;margin-left:6px;font-weight:bold;}\");\nH.push(\".badge{display:inline-block;padding:1px 7px;border-radius:10px;font-size:7.5pt;font-weight:bold;color:#fff;}.badge.g{background:#1a9d5a;}.badge.b{background:#2563eb;}.badge.a{background:#d97706;}.badge.r{background:#dc2626;}.badge.n{background:#5b6774;}\");\nH.push(\"table{width:100%;border-collapse:collapse;font-size:8pt;margin:6px 0;break-inside:avoid;}th{background:#0f2447;color:#fff;text-align:left;padding:4px 6px;}td{border:1px solid #d7dee8;padding:4px 6px;vertical-align:top;}tr:nth-child(even) td{background:#f7f9fc;}\");\nH.push(\".tags span{display:inline-block;background:#eef2f8;color:#1d3a6b;border:1px solid #d7dee8;border-radius:10px;padding:1px 8px;margin:2px 3px 0 0;font-size:8pt;}\");\nH.push(\".path{display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin:6px 0;}.step{background:#eef2f8;border:1px solid #cdd8e6;border-radius:5px;padding:4px 8px;font-size:8pt;}.arrow{color:#0f2447;font-weight:bold;}\");\nH.push(\".sect{break-inside:avoid;margin-bottom:8px;}.muted{color:#5b6774;font-size:8pt;}.disc{margin-top:14px;padding:8px 10px;background:#f4f7fb;border-left:3px solid #0f2447;font-size:7.5pt;color:#5b6774;}\");\nH.push(\"</style></head><body>\");\nH.push(\"<div class=\\\"hdr\\\"><div><h1 style=\\\"font-size:17pt;\\\">Career Intelligence Report</h1>\");\nH.push(\"<p class=\\\"muted\\\">\" + e(snap.name||v.student_name) + \" &nbsp;|&nbsp; \" + e(snap.headline||\"\") + \"</p>\");\nH.push(\"<p class=\\\"muted\\\">\" + e(snap.location||\"\") + \" &nbsp;|&nbsp; \" + e(snap.current_status||\"\") + \"</p></div>\");\nif (logo) H.push(\"<img class=\\\"logo\\\" src=\\\"\" + e(logo) + \"\\\" alt=\\\"logo\\\"/>\");\nH.push(\"</div>\");\nH.push(\"<div class=\\\"grid\\\">\");\nH.push(\"<div class=\\\"card metric\\\"><div class=\\\"n\\\">\" + e(rd.score||0) + \"</div><div class=\\\"l\\\">Readiness</div></div>\");\nH.push(\"<div class=\\\"card metric\\\"><div class=\\\"n\\\">\" + e(al.score||0) + \"</div><div class=\\\"l\\\">Alignment</div></div>\");\nH.push(\"<div class=\\\"card metric\\\"><div class=\\\"n\\\">\" + e(pc.fit_score||0) + \"</div><div class=\\\"l\\\">Career Fit</div></div>\");\nH.push(\"<div class=\\\"card metric\\\"><div class=\\\"n\\\">\" + e(emp.score||0) + \"</div><div class=\\\"l\\\">Employability</div></div>\");\nH.push(\"</div>\");\nH.push(\"<div class=\\\"sect\\\"><h2>Current Position &amp; Snapshot</h2>\");\nH.push(\"<div class=\\\"grid2\\\"><div class=\\\"card\\\"><h3>Profile</h3><p>\" + e(snap.headline||\"\") + \"</p><p class=\\\"muted\\\">Status: \" + e(snap.current_status||\"\") + \" &middot; Experience: \" + e((snap.experience_level===\"EXPERIENCED\")?\"Experienced\":\"Fresher\") + \"</p></div>\");\nH.push(\"<div class=\\\"card\\\"><h3>Readiness Overview</h3><p>\" + badge((rd.category||\"\"), cc(rd.score)) + \" Overall readiness \" + e(rd.score||0) + \"/100</p><p class=\\\"muted\\\">Readiness reflects current preparedness; it is directional, not a guarantee.</p></div></div></div>\");\nH.push(\"<div class=\\\"sect\\\"><h2>Primary Career Assessment</h2>\");\nH.push(\"<div class=\\\"card\\\"><h3>\" + e(pc.role||\"\") + \" \" + badge(pc.fit_category||\"\", cc(pc.fit_score)) + \"</h3><p>\" + prBar(pc.fit_score) + \"</p><p>\" + e(pc.reason||\"\") + \"</p>\");\nH.push(\"<div class=\\\"grid3\\\">\");\nH.push(\"<div><h3>Strengths</h3><ul>\" + arr(pc.strengths).map(x=>\"<li>\"+e(x)+\"</li>\").join(\"\") + \"</ul></div>\");\nH.push(\"<div><h3>Major Gaps</h3><ul>\" + arr(pc.major_gaps).map(x=>\"<li>\"+e(x)+\"</li>\").join(\"\") + \"</ul></div>\");\nH.push(\"<div><h3>Immediate Actions</h3><ul>\" + arr(pc.immediate_actions).map(x=>\"<li>\"+e(x)+\"</li>\").join(\"\") + \"</ul></div>\");\nH.push(\"</div></div></div>\");\nH.push(\"<div class=\\\"sect\\\"><h2>Alternative Careers &amp; Target Industry</h2><div class=\\\"grid2\\\">\");\nH.push(\"<div class=\\\"card\\\"><h3>Alternative Careers</h3><table><tr><th>Role</th><th>Fit</th><th>Why</th></tr>\" + arr(ai.alternative_careers).map(a=>\"<tr><td>\"+e(a.role)+\"</td><td>\"+e(a.fit_score)+\"</td><td>\"+e(a.reason)+\"</td></tr>\").join(\"\") + \"</table></div>\");\nH.push(\"<div class=\\\"card\\\"><h3>Target Industry: \" + e(ti.name||\"\") + \"</h3><p>\" + e(ti.summary||\"\") + \"</p><div class=\\\"tags\\\">\" + arr(ti.tags).map(t=>\"<span>\"+e(t)+\"</span>\").join(\"\") + \"</div></div>\");\nH.push(\"</div></div>\");\nH.push(\"<div class=\\\"sect\\\"><h2>Industry &amp; Job Market Scenario</h2>\");\nH.push(\"<p class=\\\"muted\\\">\" + e(ms.data_status||\"\") + \"</p><div class=\\\"grid3\\\">\");\nH.push(\"<div class=\\\"card\\\"><h3>Relevant &amp; Evolving Roles</h3><ul>\" + arr(ms.current_roles).concat(arr(ms.evolving_roles)).map(x=>\"<li>\"+e(x)+\"</li>\").join(\"\") + \"</ul></div>\");\nH.push(\"<div class=\\\"card\\\"><h3>Entry &amp; Long-Term Roles</h3><ul>\" + arr(ms.entry_roles).map(x=>\"<li>\"+e(x)+\"</li>\").join(\"\") + arr(ms.long_term_roles).map(x=>\"<li>\"+e(x)+\"</li>\").join(\"\") + \"</ul></div>\");\nH.push(\"<div class=\\\"card\\\"><h3>Key Skills In Demand</h3><div class=\\\"tags\\\">\" + arr(ms.key_skills).map(t=>\"<span>\"+e(t)+\"</span>\").join(\"\") + \"</div></div>\");\nH.push(\"</div>\");\nH.push(\"<div class=\\\"card\\\"><h3>Employability Assessment</h3><p>\" + badge(emp.market_readiness||\"\", cc(emp.score)) + \" Market readiness &middot; Interview: \" + e(emp.interview_readiness||\"\") + \" &middot; Time to employable: \" + e(emp.time_to_employable||\"\") + \"</p>\");\nH.push(\"<p class=\\\"muted\\\">Quick wins: \" + arr(emp.quick_wins).map(e).join(\"; \") + \"</p></div></div>\");\nH.push(\"<div class=\\\"sect\\\"><h2>Target Companies</h2><table><tr><th>Company</th><th>Role Family</th><th>Match</th><th>Key Requirement</th><th>Readiness</th></tr>\" + arr(ai.target_companies).map(c=>\"<tr><td>\"+e(c.company)+\"</td><td>\"+e(c.role_family)+\"</td><td>\"+badge(c.match_category||\"\",\"b\")+\"</td><td>\"+e(c.major_requirement)+\"</td><td>\"+e(c.application_readiness)+\"</td></tr>\").join(\"\") + \"</table></div>\");\nH.push(\"<div class=\\\"sect\\\"><h2>Career Readiness Scorecard</h2><table><tr><th>Dimension</th><th>Weight</th><th>Score</th><th>What Is Missing</th><th>How To Improve</th></tr>\" + arr(rd.dimensions).map(d=>\"<tr><td>\"+e(d.dimension)+\"</td><td>\"+e(d.weight)+\"%</td><td>\"+prBar(d.score)+\"</td><td>\"+e(d.missing)+\"</td><td>\"+e(d.improve)+\"</td></tr>\").join(\"\") + \"</table></div>\");\nH.push(\"<div class=\\\"sect\\\"><h2>Career Alignment &mdash; Where You Stand</h2><div class=\\\"card\\\"><p>\" + badge(al.category||\"\", cc(al.score)) + \" Alignment \" + e(al.score||0) + \"/100</p><p>\" + e(al.reasoning||\"\") + \"</p><p class=\\\"muted\\\">Key misalignment: \" + e(al.misalignment||\"\") + \"</p><p><b>Recommended direction:</b> \" + e(al.recommended_direction||\"\") + \"</p></div></div>\");\nH.push(\"<div class=\\\"sect\\\"><h2>Career Gap Analysis</h2><table><tr><th>Requirement</th><th>Current</th><th>Target</th><th>Status</th><th>Priority</th><th>Action</th><th>By</th></tr>\" + arr(ai.gap_analysis).map(g=>{const sc=g.status===\"MET\"?\"g\":(g.status===\"GAP\"?\"r\":\"a\");return \"<tr><td>\"+e(g.requirement)+\"</td><td>\"+e(g.current_state)+\"</td><td>\"+e(g.target_state)+\"</td><td>\"+badge(g.status||\"\",sc)+\"</td><td>\"+e(g.priority)+\"</td><td>\"+e(g.action)+\"</td><td>\"+e(g.timeframe)+\"</td></tr>\";}).join(\"\") + \"</table></div>\");\nH.push(\"<div class=\\\"sect\\\"><h2>Career Pathway</h2><div class=\\\"path\\\">\" + arr(ai.career_pathway).map((s,i)=>(i>0?\"<span class=\\\"arrow\\\">&rarr;</span>\":\"\")+\"<span class=\\\"step\\\"><b>\"+e(s.stage)+\"</b><br>\"+e(s.detail)+\"</span>\").join(\"\") + \"</div></div>\");\nconst rm = ai.roadmap||{};\nH.push(\"<div class=\\\"sect\\\"><h2>\" + e(rm.duration_label||\"\") + \" Roadmap</h2><div class=\\\"grid2\\\">\" + arr(rm.phases).map(p=>\"<div class=\\\"card\\\"><h3>\"+e(p.title)+\"</h3><p class=\\\"muted\\\">\"+e(p.focus)+\"</p><ul>\"+arr(p.items).map(x=>\"<li>\"+e(x)+\"</li>\").join(\"\")+\"</ul></div>\").join(\"\") + \"</div></div>\");\nH.push(\"<div class=\\\"sect\\\"><h2>Detailed 90-Day Action Plan</h2><table><tr><th>Task</th><th>Category</th><th>Priority</th><th>By Day</th><th>Linked Gap</th></tr>\" + arr(ai.ninety_day_plan).map(t=>\"<tr><td>\"+e(t.task)+\"</td><td>\"+e(t.category)+\"</td><td>\"+e(t.priority)+\"</td><td>\"+e(t.target_day)+\"</td><td>\"+e(t.linked_gap)+\"</td></tr>\").join(\"\") + \"</table></div>\");\nH.push(\"<div class=\\\"sect\\\"><h2>Compensation, Priorities &amp; Final Direction</h2><div class=\\\"grid2\\\">\");\nH.push(\"<div class=\\\"card\\\"><h3>Compensation Analysis</h3><p>Expected (stated): \" + e(comp.expected_from_form||\"Not provided\") + \"</p><p>Current salary: \" + e(comp.current_salary||\"Not provided\") + \"</p><p>Indicative post-readiness range: \" + e(ir.currency||\"\") + \" \" + e(ir.min||\"\") + \" &ndash; \" + e(ir.max||\"\") + \"</p><p class=\\\"muted\\\">\" + e(ir.note||\"INDICATIVE ESTIMATE — NOT GUARANTEED\") + \"</p></div>\");\nH.push(\"<div class=\\\"card\\\"><h3>Must-Have Requirements</h3><ul>\" + arr(ai.must_haves).map(x=>\"<li>\"+e(x)+\"</li>\").join(\"\") + \"</ul><h3>Top Priority Actions</h3><ul>\" + arr(ai.top_priority_actions).map(x=>\"<li>\"+e(x)+\"</li>\").join(\"\") + \"</ul></div>\");\nH.push(\"</div>\");\nH.push(\"<div class=\\\"card\\\" style=\\\"background:#f4f7fb;\\\"><h3>Final Career Direction</h3><p>\" + e(ai.final_direction||\"\") + \"</p></div></div>\");\nH.push(\"<div class=\\\"disc\\\">\" + e(ai.disclaimer||\"\") + \"</div>\");\nH.push(\"</body></html>\");\nreturn [{ json: { report_html: H.join(\"\") } }];"
+      },
+      "id": "bd37a96d-6f13-487a-ad28-f96b1c9ec5c8",
+      "name": "Build Report HTML",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5696,
+        1264
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.pdfshift.io/v3/convert/pdf",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpTemplatedCustomAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ source: $json.report_html, filename: $('Validate Intelligence').item.json.student_name.replace(/[^A-Za-z0-9]+/g,'_') + '_Career_Intelligence_Report.pdf', use_print: true, sandbox: false }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "2e5d540a-5609-4277-81fa-9257b325e752",
+      "name": "Report To PDFShift",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        5920,
+        1264
+      ],
+      "credentials": {
+        "httpTemplatedCustomAuth": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "YOUR_PDFSHIFT_CREDENTIAL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "outputPropertyName": "career_report_pdf"
+            }
+          }
+        }
+      },
+      "id": "d299e070-fa0e-44d5-acde-dc326065d72a",
+      "name": "Download Report PDF",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        6144,
+        1264
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const v = $(\"Validate Intelligence\").first().json; const r = (v.ai||{}).resume||{};\nconst e = (x) => String(x == null ? \"\" : x).replace(/&/g,\"&amp;\").replace(/</g,\"&lt;\").replace(/>/g,\"&gt;\");\nconst arr = (x) => Array.isArray(x) ? x : [];\nconst has = (x) => Array.isArray(x) ? x.length > 0 : !!(x && String(x).trim());\nconst c = r.contact||{};\nconst contactLine = [c.email, c.phone, c.linkedin, c.location].filter(has).map(e).join(\"  |  \");\nconst H = [];\nH.push(\"<!DOCTYPE html><html><head><meta charset=\\\"utf-8\\\"><style>\");\nH.push(\"@page{size:A4;margin:0.5in 0.55in;}*{box-sizing:border-box;}\");\nH.push(\"body{font-family:Georgia,'Times New Roman',serif;color:#1a1a1a;font-size:10pt;line-height:1.4;margin:0;}\");\nH.push(\".name{font-size:20pt;font-weight:bold;letter-spacing:1px;text-transform:uppercase;}\");\nH.push(\".role{font-size:11pt;color:#333;margin:2px 0 4px;font-weight:bold;}\");\nH.push(\".contact{font-size:9pt;color:#444;border-bottom:1.5px solid #1a1a1a;padding-bottom:8px;margin-bottom:8px;}\");\nH.push(\"h2{font-size:10.5pt;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid #999;margin:12px 0 4px;padding-bottom:2px;break-after:avoid;}\");\nH.push(\"p{margin:3px 0;}ul{margin:2px 0 6px 16px;padding:0;}li{margin:1px 0;}.item{margin-bottom:6px;break-inside:avoid;}.it-h{font-weight:bold;}.it-m{font-style:italic;color:#444;font-size:9pt;}\");\nH.push(\"</style></head><body>\");\nH.push(\"<div class=\\\"name\\\">\" + e(r.name||v.student_name) + \"</div>\");\nif (has(r.title)) H.push(\"<div class=\\\"role\\\">\" + e(r.title) + \"</div>\");\nH.push(\"<div class=\\\"contact\\\">\" + contactLine + \"</div>\");\nif (has(r.summary)) H.push(\"<h2>Professional Summary</h2><p>\" + e(r.summary) + \"</p>\");\nif (has(r.skills)) H.push(\"<h2>Skills</h2><p>\" + arr(r.skills).map(e).join(\" &bull; \") + \"</p>\");\nif (has(r.experience)) { H.push(\"<h2>Work Experience</h2>\"); arr(r.experience).forEach(x=>{H.push(\"<div class=\\\"item\\\"><span class=\\\"it-h\\\">\"+e(x.title)+\"</span> &mdash; \"+e(x.org)+\" <span class=\\\"it-m\\\">\"+e(x.period)+\"</span><ul>\"+arr(x.bullets).map(b=>\"<li>\"+e(b)+\"</li>\").join(\"\")+\"</ul></div>\");}); }\nif (has(r.projects)) { H.push(\"<h2>Projects</h2>\"); arr(r.projects).forEach(x=>{H.push(\"<div class=\\\"item\\\"><span class=\\\"it-h\\\">\"+e(x.name)+\"</span>\"+(has(x.detail)?\" &mdash; \"+e(x.detail):\"\")+\"<ul>\"+arr(x.bullets).map(b=>\"<li>\"+e(b)+\"</li>\").join(\"\")+\"</ul></div>\");}); }\nif (has(r.education)) { H.push(\"<h2>Education</h2>\"); arr(r.education).forEach(x=>{H.push(\"<div class=\\\"item\\\"><span class=\\\"it-h\\\">\"+e(x.degree)+\"</span> &mdash; \"+e(x.institute)+\" <span class=\\\"it-m\\\">\"+e(x.period)+\"</span>\"+(has(x.detail)?\"<br>\"+e(x.detail):\"\")+\"</div>\");}); }\nif (has(r.certifications)) { H.push(\"<h2>Certifications</h2><ul>\"); arr(r.certifications).forEach(x=>{H.push(\"<li>\"+e(x.name)+(has(x.provider)?\" (\"+e(x.provider)+\")\":\"\")+(has(x.year)?\", \"+e(x.year):\"\")+\"</li>\");}); H.push(\"</ul>\"); }\nif (has(r.achievements)) H.push(\"<h2>Achievements</h2><ul>\" + arr(r.achievements).map(x=>\"<li>\"+e(x)+\"</li>\").join(\"\") + \"</ul>\");\nif (has(r.leadership)) H.push(\"<h2>Leadership &amp; Extracurricular</h2><ul>\" + arr(r.leadership).map(x=>\"<li>\"+e(x)+\"</li>\").join(\"\") + \"</ul>\");\nH.push(\"</body></html>\");\nreturn [{ json: { resume_html: H.join(\"\") } }];"
+      },
+      "id": "addce213-8a72-44a1-9e16-9b11b4597b47",
+      "name": "Build Resume HTML",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5696,
+        1456
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.pdfshift.io/v3/convert/pdf",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpTemplatedCustomAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ source: $json.resume_html, filename: $('Validate Intelligence').item.json.student_name.replace(/[^A-Za-z0-9]+/g,'_') + '_ATS_Resume.pdf', use_print: true, sandbox: false }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "5fef793a-cb2b-4127-b024-0986b0312c8b",
+      "name": "Resume To PDFShift",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        5920,
+        1456
+      ],
+      "credentials": {
+        "httpTemplatedCustomAuth": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "YOUR_PDFSHIFT_CREDENTIAL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "outputPropertyName": "resume_pdf"
+            }
+          }
+        }
+      },
+      "id": "e9e360e5-2c5e-4f8c-85f3-10dbc5a5bcb1",
+      "name": "Download Resume PDF",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        6144,
+        1456
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "8eee60b8-2c79-42d5-b634-5b2670a555b8",
+      "name": "Invalid Intelligence Output",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        2224,
+        -64
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "a478beef-fc4a-4cb9-b77f-ff675a562b20",
+      "name": "Stop: Duplicate Or Missing Email",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1568,
+        -112
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "id": "d9589d6c-8fcf-4069-8aa3-e336f252ff0e",
+      "name": "Combine PDFs",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        6368,
+        1360
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first();\nconst bin = item.binary || {};\nconst v = $(\"Validate Intelligence\").first().json; const ai = v.ai || {};\nconst report = bin.career_report_pdf || {}; const resume = bin.resume_pdf || {};\nconst pdfOk = (b) => b && (String(b.mimeType||\"\").indexOf(\"pdf\") !== -1) && (b.fileSize == null || Number(b.fileSize) > 0 || (b.data && b.data.length > 0));\nconst reportChecks = [ai.student_snapshot, ai.readiness && ai.readiness.dimensions && ai.readiness.dimensions.length, ai.primary_career && ai.primary_career.role, ai.alignment && ai.alignment.score != null, ai.gap_analysis && ai.gap_analysis.length, ai.ninety_day_plan && ai.ninety_day_plan.length, ai.compensation, ai.final_direction];\nconst reportPass = reportChecks.every(Boolean) && pdfOk(report);\nconst r = ai.resume || {}; const flat = JSON.stringify(r).toLowerCase();\nconst banned = [\"not provided\",\"not applicable\",\"n/a\",\"unknown\",\"unavailable\",\"to be added\",\"no information\"];\nconst noPlaceholders = !banned.some(b => flat.indexOf(b) !== -1);\nconst resumeContentOk = !!(r.name && r.title && r.summary && (r.skills||[]).length && (r.education||[]).length);\nconst resumePass = resumeContentOk && noPlaceholders && pdfOk(resume);\nconst pass = (reportPass && resumePass) ? \"yes\" : \"no\";\nconst notes = [];\nif (!pdfOk(report)) notes.push(\"report PDF binary invalid\");\nif (!pdfOk(resume)) notes.push(\"resume PDF binary invalid\");\nif (!noPlaceholders) notes.push(\"resume contains placeholder text\");\nif (!resumeContentOk) notes.push(\"resume missing required content\");\nreturn [{ json: { quality_pass: pass, quality_notes: notes.join(\"; \") || \"All checks passed\" }, binary: item.binary }];"
+      },
+      "id": "dc0654ac-93ec-4a80-88b8-fd892db982f4",
+      "name": "Quality Gate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6288,
+        128
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "q1",
+              "leftValue": "={{ $json.quality_pass }}",
+              "rightValue": "yes",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "2c20ea54-4efa-45d6-acae-bd2203fc6214",
+      "name": "Passed Quality",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        6512,
+        128
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Validate Intelligence').item.json.student_email }}",
+        "subject": "=Your Career Intelligence Report & ATS Resume - {{ $('Validate Intelligence').item.json.ai.primary_career.role }}",
+        "message": "=<p>Hi {{ $('Validate Intelligence').item.json.student_name }},</p><p>Your personalized Career Intelligence package is ready. Based on your profile, your primary career direction is <b>{{ $('Validate Intelligence').item.json.ai.primary_career.role }}</b> with a current readiness score of <b>{{ $('Validate Intelligence').item.json.ai.readiness.score }}/100</b>.</p><p>Attached you will find:</p><ul><li>Your Career Intelligence Report (PDF)</li><li>Your ATS-ready Resume (PDF)</li></ul><p><b>Your personal interactive Career Tracker:</b><br><a href=\"{{ $('Create Tracker').item.json.spreadsheetUrl }}\">{{ $('Create Tracker').item.json.spreadsheetUrl }}</a></p><p>Use the tracker to work through your 90-day action plan and update your progress. {{ $('Validate Intelligence').item.json.ai.final_direction }}</p><p>Wishing you success,<br>Career Intelligence Team</p>",
+        "options": {
+          "appendAttribution": false,
+          "attachmentsUi": {
+            "attachmentsBinary": [
+              {
+                "property": "career_report_pdf,resume_pdf"
+              }
+            ]
+          }
+        }
+      },
+      "id": "3965c8a2-3f1a-4967-8f9a-6e156a257c6e",
+      "name": "Send Student Email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        6736,
+        128
+      ],
+      "webhookId": "REGENERATED_BY_N8N_ON_IMPORT",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "YOUR_GMAIL_CREDENTIAL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const v = $(\"Validate Intelligence\").first().json; const ai = v.ai || {}; const t = $(\"Create Tracker\").first().json || {};\nreturn [{ json: {\n  Timestamp: new Date().toISOString(), Name: v.student_name || \"\", Email: v.student_email || \"\",\n  \"Primary Career\": (ai.primary_career||{}).role || \"\", \"Tracker URL\": t.spreadsheetUrl || \"\", \"Email Status\": \"SENT\"\n} }];"
+      },
+      "id": "b1a10001-0000-4000-8000-000000000005",
+      "name": "Build Existing Row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6960,
+        -64
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_EXISTING_STUDENTS_SHEET_ID",
+          "mode": "list",
+          "cachedResultName": "Your Google Sheet",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/PLACEHOLDER/edit"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "EXISTING STUDENTS"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Name ",
+              "displayName": "Name ",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Email ID",
+              "displayName": "Email ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Student ID",
+              "displayName": "Student ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Name",
+              "displayName": "Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Email",
+              "displayName": "Email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Program",
+              "displayName": "Program",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Year",
+              "displayName": "Year",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Experience Type",
+              "displayName": "Experience Type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Target Role",
+              "displayName": "Target Role",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Readiness Score",
+              "displayName": "Readiness Score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Roadmap Duration",
+              "displayName": "Roadmap Duration",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Tracker URL",
+              "displayName": "Tracker URL",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Career Report Status",
+              "displayName": "Career Report Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Resume Status",
+              "displayName": "Resume Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Email Status",
+              "displayName": "Email Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Created At",
+              "displayName": "Created At",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Sent At",
+              "displayName": "Sent At",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Primary Career",
+              "displayName": "Primary Career",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Career Fit Score",
+              "displayName": "Career Fit Score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Target Industry",
+              "displayName": "Target Industry",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Timestamp",
+              "displayName": "Timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "handlingExtraData": "insertInNewColumn"
+        }
+      },
+      "id": "fdbea6e1-990b-465b-9cda-2f6681ed7cc2",
+      "name": "Record Successful Student",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        6736,
+        320
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "YOUR_GOOGLE_SHEETS_CREDENTIAL"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "411839d7-2b21-443b-a138-c47b80d95e88",
+      "name": "Quality Failed - Not Sent",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        6736,
+        -64
+      ]
+    }
+  ],
+  "connections": {
+    "Form Response Trigger": {
+      "main": [
+        [
+          {
+            "node": "Workflow Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Workflow Config": {
+      "main": [
+        [
+          {
+            "node": "Normalize Submission",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Submission": {
+      "main": [
+        [
+          {
+            "node": "Read Existing Students",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Existing Students": {
+      "main": [
+        [
+          {
+            "node": "Duplicate Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Duplicate Check": {
+      "main": [
+        [
+          {
+            "node": "Is New Student",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is New Student": {
+      "main": [
+        [
+          {
+            "node": "Proceed - New Student",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Stop: Duplicate Or Missing Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Proceed - New Student": {
+      "main": [
+        [
+          {
+            "node": "Roadmap Duration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Roadmap Duration": {
+      "main": [
+        [
+          {
+            "node": "Career Intelligence Engine",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Career Intelligence Engine": {
+      "main": [
+        [
+          {
+            "node": "Validate Intelligence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini 3 Flash Preview": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Career Intelligence Engine",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Intelligence": {
+      "main": [
+        [
+          {
+            "node": "Is Valid Intelligence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Valid Intelligence": {
+      "main": [
+        [
+          {
+            "node": "Intelligence Ready",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Invalid Intelligence Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Intelligence Ready": {
+      "main": [
+        [
+          {
+            "node": "Build Student Row",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Create Tracker",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Student Row": {
+      "main": [
+        [
+          {
+            "node": "Save Student Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Student Data": {
+      "main": [
+        [
+          {
+            "node": "Build Assessment Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Assessment Row": {
+      "main": [
+        [
+          {
+            "node": "Save Assessment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Assessment": {
+      "main": [
+        [
+          {
+            "node": "Build Career Plan Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Career Plan Row": {
+      "main": [
+        [
+          {
+            "node": "Save Career Plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Career Plan": {
+      "main": [
+        [
+          {
+            "node": "Build Report Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Report Row": {
+      "main": [
+        [
+          {
+            "node": "Save Report Record",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Tracker": {
+      "main": [
+        [
+          {
+            "node": "Tracker Dashboard",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Build 90-Day Rows",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Build Skill Rows",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Build Milestone Rows",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Share Tracker",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build 90-Day Rows": {
+      "main": [
+        [
+          {
+            "node": "Tracker 90-Day Plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Skill Rows": {
+      "main": [
+        [
+          {
+            "node": "Tracker Skills",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Milestone Rows": {
+      "main": [
+        [
+          {
+            "node": "Tracker Milestones",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Share Tracker": {
+      "main": [
+        [
+          {
+            "node": "Prepare Documents",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Documents": {
+      "main": [
+        [
+          {
+            "node": "Build Report HTML",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Build Resume HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Report HTML": {
+      "main": [
+        [
+          {
+            "node": "Report To PDFShift",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Report To PDFShift": {
+      "main": [
+        [
+          {
+            "node": "Download Report PDF",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download Report PDF": {
+      "main": [
+        [
+          {
+            "node": "Combine PDFs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Resume HTML": {
+      "main": [
+        [
+          {
+            "node": "Resume To PDFShift",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resume To PDFShift": {
+      "main": [
+        [
+          {
+            "node": "Download Resume PDF",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download Resume PDF": {
+      "main": [
+        [
+          {
+            "node": "Combine PDFs",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Combine PDFs": {
+      "main": [
+        [
+          {
+            "node": "Quality Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Quality Gate": {
+      "main": [
+        [
+          {
+            "node": "Passed Quality",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Passed Quality": {
+      "main": [
+        [
+          {
+            "node": "Send Student Email",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Quality Failed - Not Sent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Student Email": {
+      "main": [
+        [
+          {
+            "node": "Build Existing Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Existing Row": {
+      "main": [
+        [
+          {
+            "node": "Record Successful Student",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "errorWorkflow": "YOUR_ERROR_HANDLER_WORKFLOW_ID"
+  },
+  "staticData": null,
+  "pinData": {},
+  "triggerCount": 1,
+  "meta": null
+}

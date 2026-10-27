@@ -1,0 +1,32 @@
+# Secrets and environment files
+.env
+.env.*
+*.pem
+*.key
+credentials.json
+service-account*.json
+client_secret*.json
+
+# Unsanitized n8n exports (keep only cleaned copies in workflows/)
+*_original.json
+*-raw.json
+exports/
+
+# Real student data, never commit
+real-data/
+student-data/
+responses/
+*.csv
+*.xlsx
+
+# Generated student outputs (use anonymized files in samples/ only)
+*Career_Intelligence_Report*.pdf
+*ATS_Resume*.pdf
+output/
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.log
